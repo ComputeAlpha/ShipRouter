@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShipRouter - Marine Navigation</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left Panel - Status & Controls -->
+        <aside class="sidebar">
+            <header class="sidebar-header">
+                <h1 class="logo">
+                    <span class="logo-icon">⚓</span>
+                    ShipRouter
+                </h1>
+                <div class="connection-badge" id="connectionBadge">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Disconnected</span>
+                </div>
+            </header>
+
+            <!-- System Mode Indicator -->
+            <section class="status-card mode-card" id="modeCard">
+                <div class="mode-indicator">
+                    <span class="mode-label">MODE</span>
+                    <span class="mode-value" id="systemMode">NORMAL</span>
+                </div>
+            </section>
+
+            <!-- Fuel Status -->
+            <section class="status-card fuel-card" id="fuelCard">
+                <div class="card-header">
+                    <span class="card-icon">⛽</span>
+                    <span class="card-title">Fuel Status</span>
+                </div>
+                <div class="fuel-indicator" id="fuelIndicator">
+                    <div class="fuel-status-visual">
+                        <div class="fuel-level" id="fuelLevel"></div>
+                    </div>
+                    <span class="fuel-text" id="fuelText">NORMAL</span>
+                </div>
+            </section>
+
+            <!-- GPS Status -->
+            <section class="status-card gps-card">
+                <div class="card-header">
+                    <span class="card-icon">📡</span>
+                    <span class="card-title">GPS Status</span>
+                </div>
+                <div class="gps-data">
+                    <div class="data-row">
+                        <span class="data-label">Status</span>
+                        <span class="data-value" id="gpsStatus">No Fix</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Position</span>
+                        <span class="data-value mono" id="gpsPosition">---, ---</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Speed</span>
+                        <span class="data-value" id="gpsSpeed">--- kts</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Heading</span>
+                        <span class="data-value" id="gpsHeading">---°</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Satellites</span>
+                        <span class="data-value" id="gpsSatellites">0</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Harbor Selection -->
+            <section class="status-card harbor-card">
+                <div class="card-header">
+                    <span class="card-icon">🏠</span>
+                    <span class="card-title">Destination</span>
+                </div>
+                <div class="harbor-selector">
+                    <select id="harborSelect" class="harbor-dropdown">
+                        <option value="">Select Harbor...</option>
+                    </select>
+                    <button id="clearHarborBtn" class="btn btn-secondary" title="Clear Selection">✕</button>
+                </div>
+            </section>
+
+            <!-- Navigation Info -->
+            <section class="status-card nav-card" id="navCard">
+                <div class="card-header">
+                    <span class="card-icon">🧭</span>
+                    <span class="card-title">Navigation</span>
+                </div>
+                <div class="nav-display" id="navDisplay">
+                    <div class="nav-destination" id="navDestination">No destination selected</div>
+                    <div class="nav-metrics" id="navMetrics" style="display: none;">
+                        <div class="metric">
+                            <span class="metric-value" id="navDistance">---</span>
+                            <span class="metric-unit">km</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-value" id="navBearing">---</span>
+                            <span class="metric-unit" id="navCardinal">°</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Nearest Harbors (Emergency) -->
+            <section class="status-card nearest-card" id="nearestCard">
+                <div class="card-header">
+                    <span class="card-icon">📍</span>
+                    <span class="card-title">Nearest Harbors</span>
+                </div>
+                <ul class="nearest-list" id="nearestList">
+                    <li class="nearest-item empty">Waiting for GPS...</li>
+                </ul>
+            </section>
+
+            <!-- Emergency Acknowledge Button -->
+            <div class="emergency-actions" id="emergencyActions" style="display: none;">
+                <button id="acknowledgeBtn" class="btn btn-emergency">
+                    ⚠️ ACKNOWLEDGE & EXIT EMERGENCY
+                </button>
+            </div>
+        </aside>
+
+        <!-- Right Panel - Map -->
+        <main class="map-container">
+            <div id="map"></div>
+            
+            <!-- Toast Notifications -->
+            <div class="toast-container" id="toastContainer"></div>
+        </main>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Custom JS -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

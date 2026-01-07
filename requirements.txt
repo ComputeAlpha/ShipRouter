@@ -1,0 +1,20 @@
+# ShipRouter - Python Dependencies
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# WebSocket support
+websockets>=12.0
+
+# Serial Communication
+pyserial>=3.5
+
+# NMEA Parsing
+pynmea2>=1.19.0
+
+# Type hints and validation
+pydantic>=2.5.0
+
+# Development (optional)
+python-dotenv>=1.0.0

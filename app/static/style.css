@@ -1,0 +1,697 @@
+/* =============================================================================
+   ShipRouter - Dark Theme Minimal Dashboard
+   ============================================================================= */
+
+:root {
+    /* Colors */
+    --bg-primary: #000000;
+    --bg-secondary: #0a0a0a;
+    --bg-card: #111111;
+    --bg-card-hover: #1a1a1a;
+    
+    --text-primary: #ffffff;
+    --text-secondary: #888888;
+    --text-muted: #555555;
+    
+    --accent-primary: #00ff88;
+    --accent-secondary: #00cc6a;
+    --accent-warning: #ffaa00;
+    --accent-danger: #ff3355;
+    --accent-info: #00aaff;
+    
+    --border-color: #222222;
+    --border-light: #333333;
+    
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+    
+    /* Typography */
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Inter', -apple-system, sans-serif;
+    
+    /* Transitions */
+    --transition-fast: 150ms ease;
+    --transition-normal: 250ms ease;
+}
+
+/* =============================================================================
+   Reset & Base
+   ============================================================================= */
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* =============================================================================
+   Layout
+   ============================================================================= */
+
+.app-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+.sidebar {
+    width: 320px;
+    min-width: 320px;
+    height: 100%;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: var(--spacing-md);
+    gap: var(--spacing-md);
+}
+
+.map-container {
+    flex: 1;
+    position: relative;
+    background: var(--bg-primary);
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+/* =============================================================================
+   Sidebar Header
+   ============================================================================= */
+
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.logo {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.logo-icon {
+    font-size: 20px;
+}
+
+.connection-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--bg-card);
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-danger);
+    animation: pulse 2s infinite;
+}
+
+.connection-badge.connected .status-dot {
+    background: var(--accent-primary);
+    animation: none;
+}
+
+.connection-badge.connected .status-text {
+    color: var(--accent-primary);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* =============================================================================
+   Status Cards
+   ============================================================================= */
+
+.status-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: var(--spacing-md);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.card-icon {
+    font-size: 16px;
+}
+
+.card-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+/* =============================================================================
+   Mode Card
+   ============================================================================= */
+
+.mode-card {
+    background: var(--bg-card);
+}
+
+.mode-indicator {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mode-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+}
+
+.mode-value {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent-primary);
+}
+
+.mode-card.emergency {
+    background: linear-gradient(135deg, #1a0000 0%, #330011 100%);
+    border-color: var(--accent-danger);
+    animation: emergency-pulse 1s infinite;
+}
+
+.mode-card.emergency .mode-value {
+    color: var(--accent-danger);
+}
+
+@keyframes emergency-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 51, 85, 0.4); }
+    50% { box-shadow: 0 0 20px 5px rgba(255, 51, 85, 0.2); }
+}
+
+/* =============================================================================
+   Fuel Card
+   ============================================================================= */
+
+.fuel-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.fuel-status-visual {
+    width: 60px;
+    height: 24px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.fuel-level {
+    height: 100%;
+    width: 100%;
+    background: var(--accent-primary);
+    transition: var(--transition-normal);
+}
+
+.fuel-level.low {
+    width: 20%;
+    background: var(--accent-danger);
+    animation: fuel-blink 0.5s infinite;
+}
+
+@keyframes fuel-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.fuel-text {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+
+.fuel-text.low {
+    color: var(--accent-danger);
+}
+
+/* =============================================================================
+   GPS Card
+   ============================================================================= */
+
+.gps-data {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.data-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.data-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.data-value.mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.data-value.valid {
+    color: var(--accent-primary);
+}
+
+.data-value.invalid {
+    color: var(--accent-danger);
+}
+
+/* =============================================================================
+   Harbor Selection
+   ============================================================================= */
+
+.harbor-selector {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.harbor-dropdown {
+    flex: 1;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.harbor-dropdown:hover {
+    border-color: var(--accent-primary);
+}
+
+.harbor-dropdown:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.2);
+}
+
+.harbor-dropdown option {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* =============================================================================
+   Buttons
+   ============================================================================= */
+
+.btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.btn:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--text-secondary);
+}
+
+.btn-secondary {
+    padding: var(--spacing-sm);
+    min-width: 36px;
+}
+
+.btn-emergency {
+    width: 100%;
+    padding: var(--spacing-md);
+    background: var(--accent-danger);
+    border-color: var(--accent-danger);
+    color: #ffffff;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-emergency:hover {
+    background: #ff1144;
+    border-color: #ff1144;
+}
+
+/* =============================================================================
+   Navigation Display
+   ============================================================================= */
+
+.nav-display {
+    text-align: center;
+}
+
+.nav-destination {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+}
+
+.nav-destination.active {
+    color: var(--accent-primary);
+    font-weight: 500;
+}
+
+.nav-metrics {
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-xl);
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.metric-value {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.metric-unit {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-top: var(--spacing-xs);
+}
+
+/* =============================================================================
+   Nearest Harbors List
+   ============================================================================= */
+
+.nearest-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.nearest-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    border-left: 3px solid transparent;
+    transition: var(--transition-fast);
+}
+
+.nearest-item:first-child {
+    border-left-color: var(--accent-primary);
+}
+
+.nearest-item.empty {
+    color: var(--text-muted);
+    font-style: italic;
+    justify-content: center;
+    border-left-color: transparent;
+}
+
+.nearest-item .harbor-name {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.nearest-item .harbor-distance {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* =============================================================================
+   Emergency Actions
+   ============================================================================= */
+
+.emergency-actions {
+    margin-top: auto;
+    padding-top: var(--spacing-md);
+}
+
+/* =============================================================================
+   Toast Notifications
+   ============================================================================= */
+
+.toast-container {
+    position: absolute;
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    z-index: 1000;
+}
+
+.toast {
+    padding: var(--spacing-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    min-width: 280px;
+    max-width: 400px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    animation: toast-in 0.3s ease;
+}
+
+.toast.warning {
+    border-color: var(--accent-warning);
+    background: linear-gradient(135deg, #1a1100 0%, #332200 100%);
+}
+
+.toast.error {
+    border-color: var(--accent-danger);
+    background: linear-gradient(135deg, #1a0000 0%, #330011 100%);
+}
+
+.toast.success {
+    border-color: var(--accent-primary);
+    background: linear-gradient(135deg, #001a0a 0%, #003318 100%);
+}
+
+.toast-title {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: var(--spacing-xs);
+}
+
+.toast-message {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.toast.removing {
+    animation: toast-out 0.3s ease forwards;
+}
+
+@keyframes toast-out {
+    to {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+}
+
+/* =============================================================================
+   Leaflet Map Overrides (Dark Theme)
+   ============================================================================= */
+
+.leaflet-container {
+    background: var(--bg-primary);
+}
+
+.leaflet-control-zoom {
+    border: 1px solid var(--border-color) !important;
+    border-radius: 4px !important;
+    overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+.leaflet-control-zoom a:hover {
+    background: var(--bg-card-hover) !important;
+}
+
+.leaflet-control-attribution {
+    background: rgba(0, 0, 0, 0.7) !important;
+    color: var(--text-muted) !important;
+}
+
+.leaflet-control-attribution a {
+    color: var(--text-secondary) !important;
+}
+
+/* Custom Markers */
+.vessel-marker {
+    background: var(--accent-info);
+    border: 3px solid var(--text-primary);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    box-shadow: 0 0 10px rgba(0, 170, 255, 0.5);
+}
+
+.harbor-marker {
+    background: var(--accent-primary);
+    border: 2px solid var(--text-primary);
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+}
+
+.harbor-marker.destination {
+    background: var(--accent-warning);
+    width: 18px;
+    height: 18px;
+    animation: destination-pulse 1.5s infinite;
+}
+
+.harbor-marker.emergency {
+    background: var(--accent-danger);
+    animation: emergency-marker-pulse 0.5s infinite;
+}
+
+@keyframes destination-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 170, 0, 0.4); }
+    50% { box-shadow: 0 0 15px 5px rgba(255, 170, 0, 0.2); }
+}
+
+@keyframes emergency-marker-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 51, 85, 0.6); }
+    50% { box-shadow: 0 0 20px 8px rgba(255, 51, 85, 0.3); }
+}
+
+/* Leaflet Popup */
+.leaflet-popup-content-wrapper {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border-radius: 8px !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.leaflet-popup-tip {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.leaflet-popup-content {
+    margin: var(--spacing-md) !important;
+    font-family: var(--font-sans);
+}
+
+.popup-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: var(--spacing-xs);
+}
+
+.popup-info {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* =============================================================================
+   Scrollbar Styling
+   ============================================================================= */
+
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: var(--border-light);
+    border-radius: 3px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
