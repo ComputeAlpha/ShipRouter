@@ -137,6 +137,21 @@ class SerialInterface(BaseSerialInterface):
         """
         result = CombinedData()
         
+        # Ignore comment lines (startup messages from Arduino)
+        if raw_line.startswith('#'):
+            logger.debug(f"Ignoring comment: {raw_line}")
+            return result
+        
+        # Ignore empty lines
+        if not raw_line.strip():
+            return result
+        
+        # Check for control characters (corrupted data)
+        if any(ord(c) < 32 and c not in '\r\n\t' for c in raw_line):
+            self._parse_errors += 1
+            logger.warning(f"Corrupted data (control chars detected), skipping")
+            return result
+        
         try:
             data = json.loads(raw_line)
             self._packets_received += 1
@@ -149,13 +164,20 @@ class SerialInterface(BaseSerialInterface):
             # Parse NMEA sentence
             if 'nmea' in data and data['nmea']:
                 nmea_sentence = data['nmea']
-                gps_data = self._gps_interface.parse_nmea(nmea_sentence)
-                result.gps = gps_data
+                # Validate NMEA starts with $ and has reasonable length
+                if nmea_sentence.startswith('$') and len(nmea_sentence) > 10:
+                    gps_data = self._gps_interface.parse_nmea(nmea_sentence)
+                    result.gps = gps_data
+                else:
+                    logger.debug(f"Invalid NMEA format: {nmea_sentence[:30]}...")
             
         except json.JSONDecodeError as e:
             self._parse_errors += 1
-            result.parse_error = f"JSON parse error: {e}"
-            logger.warning(f"JSON parse error: {e} for line: {raw_line}")
+            # Only log if it looks like it should have been JSON
+            if raw_line.startswith('{'):
+                logger.warning(f"JSON parse error (possible data corruption): {e}")
+            else:
+                logger.debug(f"Non-JSON line ignored: {raw_line[:50]}...")
         except (KeyError, ValueError) as e:
             self._parse_errors += 1
             result.parse_error = f"Data format error: {e}"

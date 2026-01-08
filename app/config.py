@@ -15,7 +15,7 @@ HARBORS_CSV = DATASET_DIR / "harbors.csv"
 # =============================================================================
 # SERIAL COMMUNICATION
 # =============================================================================
-SERIAL_PORT = "/dev/ttyACM1"
+SERIAL_PORT = "/dev/ttyACM0"
 SERIAL_BAUDRATE = 115200
 SERIAL_TIMEOUT = 1.0  # seconds
 

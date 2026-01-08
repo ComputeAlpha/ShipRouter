@@ -39,11 +39,15 @@ class GPSInterface(BaseGPSInterface):
             return self._current_data
         
         try:
+            # Try parsing with checksum validation
             msg = pynmea2.parse(nmea_sentence.strip())
             self._update_from_message(msg)
             self._current_data.raw_nmea = nmea_sentence
             self._last_update = datetime.now()
             
+        except pynmea2.ChecksumError as e:
+            # Log checksum errors but don't spam - common with noisy serial
+            logger.debug(f"NMEA checksum error: {e}")
         except pynmea2.ParseError as e:
             logger.warning(f"NMEA parse error: {e} for sentence: {nmea_sentence}")
         except Exception as e:
@@ -65,6 +69,10 @@ class GPSInterface(BaseGPSInterface):
         # VTG - Track Made Good and Ground Speed
         elif isinstance(msg, pynmea2.VTG):
             self._parse_vtg(msg)
+        
+        # GLL - Geographic Position (Latitude/Longitude)
+        elif isinstance(msg, pynmea2.GLL):
+            self._parse_gll(msg)
     
     def _parse_gga(self, msg: pynmea2.GGA) -> None:
         """Parse GGA sentence for position and fix quality"""
@@ -126,6 +134,22 @@ class GPSInterface(BaseGPSInterface):
                 
         except (ValueError, TypeError) as e:
             logger.warning(f"Error parsing VTG fields: {e}")
+    
+    def _parse_gll(self, msg: pynmea2.GLL) -> None:
+        """Parse GLL sentence for geographic position"""
+        try:
+            # Only update position if status is valid ('A')
+            if hasattr(msg, 'status') and msg.status == 'A':
+                if msg.latitude and msg.longitude:
+                    self._current_data.latitude = msg.latitude
+                    self._current_data.longitude = msg.longitude
+                
+                # Set fix quality to 1 if valid and not already set
+                if self._current_data.fix_quality == 0:
+                    self._current_data.fix_quality = 1
+                    
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Error parsing GLL fields: {e}")
     
     def get_current_position(self) -> Optional[GPSData]:
         """
