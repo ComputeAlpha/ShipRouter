@@ -16,5 +16,10 @@ pynmea2>=1.19.0
 # Type hints and validation
 pydantic>=2.5.0
 
+# Geospatial libraries (for sea routing)
+shapely>=2.0.0
+pyproj>=3.6.0
+fiona>=1.9.0
+
 # Development (optional)
 python-dotenv>=1.0.0

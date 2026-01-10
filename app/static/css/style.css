@@ -646,6 +646,41 @@ body {
     50% { box-shadow: 0 0 20px 8px rgba(255, 51, 85, 0.3); }
 }
 
+/* Waypoint markers for sea route */
+.waypoint-marker {
+    background: transparent;
+}
+
+.waypoint-dot {
+    width: 10px;
+    height: 10px;
+    background: var(--accent-info);
+    border: 2px solid var(--text-primary);
+    border-radius: 50%;
+    font-size: 0;
+    box-shadow: 0 0 5px rgba(0, 170, 255, 0.5);
+}
+
+/* Terrain warning */
+.data-value.warning {
+    color: var(--accent-warning);
+}
+
+/* Sea routing indicator */
+.route-type-indicator {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--bg-secondary);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    margin-left: var(--spacing-sm);
+}
+
+.route-type-indicator.sea-route {
+    color: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+}
+
 /* Leaflet Popup */
 .leaflet-popup-content-wrapper {
     background: var(--bg-card) !important;

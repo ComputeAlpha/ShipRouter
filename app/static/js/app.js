@@ -29,7 +29,14 @@ const state = {
     selectedHarbor: null,
     destination: null,
     nearestHarbors: [],
-    harbors: []
+    harbors: [],
+    // Sea routing
+    seaRoutingAvailable: false,
+    isOnSea: true,
+    terrainType: 'unknown',
+    seaRoute: null,
+    routeWaypoints: [],
+    navigationGuidance: null
 };
 
 // =============================================================================
@@ -90,6 +97,8 @@ let map;
 let vesselMarker;
 let harborMarkers = {};
 let destinationLine;
+let seaRouteLine;
+let waypointMarkers = [];
 
 function initMap() {
     map = L.map('map', {
@@ -197,6 +206,65 @@ function drawDestinationLine(fromLat, fromLon, toLat, toLon, isEmergency = false
     ).addTo(map);
 }
 
+function drawSeaRoute(waypoints, isEmergency = false) {
+    // Clear existing sea route
+    if (seaRouteLine) {
+        map.removeLayer(seaRouteLine);
+        seaRouteLine = null;
+    }
+    
+    // Clear existing waypoint markers
+    waypointMarkers.forEach(marker => map.removeLayer(marker));
+    waypointMarkers = [];
+    
+    if (!waypoints || waypoints.length < 2) return;
+    
+    // Build coordinates array
+    const coords = waypoints.map(wp => [wp.lat, wp.lon]);
+    
+    // Draw route line
+    const color = isEmergency ? '#ff3355' : '#00ff88';
+    
+    seaRouteLine = L.polyline(coords, {
+        color,
+        weight: 3,
+        opacity: 0.9
+    }).addTo(map);
+    
+    // Add waypoint markers (skip first and last - origin and destination)
+    waypoints.forEach((wp, index) => {
+        if (wp.is_origin || wp.is_destination) return;
+        
+        const icon = L.divIcon({
+            className: 'waypoint-marker',
+            iconSize: [10, 10],
+            iconAnchor: [5, 5],
+            html: `<div class="waypoint-dot">${index}</div>`
+        });
+        
+        const marker = L.marker([wp.lat, wp.lon], { icon })
+            .bindPopup(`
+                <div class="popup-title">Waypoint ${index}</div>
+                <div class="popup-info">
+                    ${wp.distance_from_prev_km?.toFixed(1) || '--'} km from prev<br>
+                    ${wp.bearing_to_next?.toFixed(0) || '--'}° ${wp.cardinal_to_next || ''}
+                </div>
+            `);
+        
+        marker.addTo(map);
+        waypointMarkers.push(marker);
+    });
+}
+
+function clearSeaRoute() {
+    if (seaRouteLine) {
+        map.removeLayer(seaRouteLine);
+        seaRouteLine = null;
+    }
+    waypointMarkers.forEach(marker => map.removeLayer(marker));
+    waypointMarkers = [];
+}
+
 // =============================================================================
 // WebSocket Connection
 // =============================================================================
@@ -269,6 +337,18 @@ function handleStateUpdate(data) {
         state.fuelLow = data.fuel.is_low;
     }
     
+    // Sea routing
+    if (data.sea_routing) {
+        state.seaRoutingAvailable = data.sea_routing.available;
+        state.isOnSea = data.sea_routing.is_on_sea;
+        state.terrainType = data.sea_routing.terrain_type;
+        state.seaRoute = data.sea_routing.route;
+        state.routeWaypoints = data.sea_routing.waypoints || [];
+        state.navigationGuidance = data.sea_routing.guidance;
+        
+        updateTerrainUI(data.sea_routing);
+    }
+    
     // Navigation
     if (data.navigation) {
         state.systemMode = data.navigation.system_mode;
@@ -277,24 +357,38 @@ function handleStateUpdate(data) {
         state.selectedHarbor = data.navigation.selected_harbor;
         
         updateModeUI(data.navigation.system_mode);
-        updateNavigationUI(data.navigation);
+        updateNavigationUI(data.navigation, data.sea_routing);
         updateNearestUI(data.navigation.nearest_harbors);
         
         // Update map
-        if (data.navigation.destination && state.currentPosition) {
+        const isEmergency = data.navigation.system_mode === 'emergency';
+        
+        if (data.navigation.destination) {
             const dest = data.navigation.destination;
-            const isEmergency = data.navigation.system_mode === 'emergency';
-            
             updateDestinationMarker(dest.name, isEmergency);
-            drawDestinationLine(
-                state.currentPosition.lat,
-                state.currentPosition.lon,
-                dest.latitude,
-                dest.longitude,
-                isEmergency
-            );
+            
+            // Draw sea route if available, otherwise draw direct line
+            if (state.routeWaypoints && state.routeWaypoints.length > 0) {
+                drawSeaRoute(state.routeWaypoints, isEmergency);
+                // Hide direct line when we have sea route
+                if (destinationLine) {
+                    map.removeLayer(destinationLine);
+                    destinationLine = null;
+                }
+            } else if (state.currentPosition) {
+                // Fallback to direct line
+                clearSeaRoute();
+                drawDestinationLine(
+                    state.currentPosition.lat,
+                    state.currentPosition.lon,
+                    dest.latitude,
+                    dest.longitude,
+                    isEmergency
+                );
+            }
         } else {
             updateDestinationMarker(null);
+            clearSeaRoute();
             if (destinationLine) {
                 map.removeLayer(destinationLine);
                 destinationLine = null;
@@ -361,19 +455,42 @@ function updateGPSUI(gps) {
     elements.gpsSatellites.textContent = gps.satellites || '0';
 }
 
-function updateNavigationUI(nav) {
+function updateNavigationUI(nav, seaRouting = null) {
     if (nav.destination) {
         elements.navDestination.textContent = nav.destination.name;
         elements.navDestination.classList.add('active');
         elements.navMetrics.style.display = 'flex';
         
-        elements.navDistance.textContent = nav.destination.distance_km.toFixed(2);
-        elements.navBearing.textContent = nav.destination.bearing.toFixed(0);
-        elements.navCardinal.textContent = `° ${nav.destination.cardinal_direction}`;
+        // Use sea route distance if available, otherwise straight-line
+        if (seaRouting?.route?.is_valid) {
+            elements.navDistance.textContent = seaRouting.route.total_distance_km.toFixed(1);
+            
+            // Show guidance to next waypoint if available
+            if (seaRouting.guidance?.navigation) {
+                elements.navBearing.textContent = seaRouting.guidance.navigation.bearing.toFixed(0);
+                elements.navCardinal.textContent = `° ${seaRouting.guidance.navigation.cardinal}`;
+            } else {
+                elements.navBearing.textContent = nav.destination.bearing.toFixed(0);
+                elements.navCardinal.textContent = `° ${nav.destination.cardinal_direction}`;
+            }
+        } else {
+            elements.navDistance.textContent = nav.destination.distance_km.toFixed(2);
+            elements.navBearing.textContent = nav.destination.bearing.toFixed(0);
+            elements.navCardinal.textContent = `° ${nav.destination.cardinal_direction}`;
+        }
     } else {
         elements.navDestination.textContent = 'No destination selected';
         elements.navDestination.classList.remove('active');
         elements.navMetrics.style.display = 'none';
+    }
+}
+
+function updateTerrainUI(seaRouting) {
+    // Update GPS card to show terrain type
+    const terrainEl = document.getElementById('gpsTerrain');
+    if (terrainEl) {
+        terrainEl.textContent = seaRouting.is_on_sea ? 'Sea' : 'Land';
+        terrainEl.classList.toggle('warning', !seaRouting.is_on_sea);
     }
 }
 

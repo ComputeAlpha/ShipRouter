@@ -219,6 +219,59 @@ async def get_connection_status():
     }
 
 
+@router.get("/sea-routing/status")
+async def get_sea_routing_status():
+    """Get sea routing availability and status"""
+    service = get_router_service()
+    state = service.get_state()
+    
+    return {
+        "available": state.sea_routing_available,
+        "is_on_sea": state.is_on_sea,
+        "terrain_type": state.terrain_type,
+        "grid_nodes": service.sea_router.grid_node_count if service.sea_router else 0
+    }
+
+
+@router.get("/sea-routing/route")
+async def get_current_sea_route():
+    """Get current sea route with waypoints"""
+    service = get_router_service()
+    state = service.get_state()
+    
+    if not state.sea_routing_available:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Sea routing not available - geodata not installed"}
+        )
+    
+    return {
+        "route": state.sea_route,
+        "waypoints": state.route_waypoints,
+        "guidance": state.navigation_guidance
+    }
+
+
+@router.get("/sea-routing/terrain")
+async def check_terrain():
+    """Check if current position is on land or sea"""
+    service = get_router_service()
+    state = service.get_state()
+    
+    if not state.gps_valid:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "GPS position not available"}
+        )
+    
+    return {
+        "latitude": state.latitude,
+        "longitude": state.longitude,
+        "is_on_sea": state.is_on_sea,
+        "terrain_type": state.terrain_type
+    }
+
+
 # =============================================================================
 # WebSocket Endpoint
 # =============================================================================

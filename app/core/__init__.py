@@ -25,6 +25,16 @@ from .fuel_monitor import (
     FuelMonitor
 )
 
+# Sea routing (may not be available if geodata not installed)
+try:
+    from .geo_classifier import GeoClassifier, ClassificationResult
+    from .navigation_grid import NavigationGrid, GridNode, GridGenerator
+    from .route_engine import RouteEngine, SeaRoute, RouteWaypoint
+    from .sea_router import SeaRouter, NavigationGuidance, get_sea_router
+    HAS_SEA_ROUTING = True
+except ImportError:
+    HAS_SEA_ROUTING = False
+
 __all__ = [
     # Navigation
     'NavigationResult',
@@ -43,5 +53,23 @@ __all__ = [
     # Fuel
     'EmergencyState',
     'FuelMonitorState',
-    'FuelMonitor'
+    'FuelMonitor',
+    # Sea routing flag
+    'HAS_SEA_ROUTING',
 ]
+
+# Add sea routing exports if available
+if HAS_SEA_ROUTING:
+    __all__.extend([
+        'GeoClassifier',
+        'ClassificationResult',
+        'NavigationGrid',
+        'GridNode',
+        'GridGenerator',
+        'RouteEngine',
+        'SeaRoute',
+        'RouteWaypoint',
+        'SeaRouter',
+        'NavigationGuidance',
+        'get_sea_router',
+    ])

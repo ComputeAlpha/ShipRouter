@@ -19,8 +19,18 @@ from ..core import (
     FuelMonitor, 
     FuelMonitorState,
     NavigationResult,
-    calculate_navigation
+    calculate_navigation,
+    HAS_SEA_ROUTING
 )
+
+# Import sea routing if available
+if HAS_SEA_ROUTING:
+    from ..core import SeaRouter, SeaRoute, NavigationGuidance, get_sea_router
+else:
+    SeaRouter = None
+    SeaRoute = None
+    NavigationGuidance = None
+
 from ..config import (
     ConnectionStatus, 
     SystemMode, 
@@ -57,6 +67,14 @@ class SystemState:
     destination: Optional[HarborWithDistance] = None
     nearest_harbors: List[HarborWithDistance] = field(default_factory=list)
     
+    # Sea routing
+    sea_routing_available: bool = False
+    is_on_sea: bool = True
+    terrain_type: str = "unknown"
+    sea_route: Optional[dict] = None  # SeaRoute.to_dict()
+    route_waypoints: List[dict] = field(default_factory=list)
+    navigation_guidance: Optional[dict] = None  # NavigationGuidance.to_dict()
+    
     # Timestamps
     last_update: Optional[datetime] = None
     last_gps_update: Optional[datetime] = None
@@ -86,6 +104,14 @@ class SystemState:
                 "selected_harbor": self.selected_harbor,
                 "destination": self.destination.to_dict() if self.destination else None,
                 "nearest_harbors": [h.to_dict() for h in self.nearest_harbors]
+            },
+            "sea_routing": {
+                "available": self.sea_routing_available,
+                "is_on_sea": self.is_on_sea,
+                "terrain_type": self.terrain_type,
+                "route": self.sea_route,
+                "waypoints": self.route_waypoints,
+                "guidance": self.navigation_guidance
             },
             "timestamps": {
                 "last_update": self.last_update.isoformat() if self.last_update else None,
@@ -121,6 +147,14 @@ class RouterService:
             on_emergency_clear=self._on_emergency_cleared
         )
         
+        # Sea router (optional - may not be available)
+        self._sea_router: Optional[SeaRouter] = None
+        if HAS_SEA_ROUTING:
+            try:
+                self._sea_router = SeaRouter(auto_load=False)
+            except Exception as e:
+                logger.warning(f"Sea routing not available: {e}")
+        
         # State
         self._state = SystemState()
         self._selected_harbor: Optional[str] = None
@@ -136,7 +170,7 @@ class RouterService:
     
     def initialize(self) -> bool:
         """
-        Initialize the service (load harbors, etc.)
+        Initialize the service (load harbors, sea router, etc.)
         
         Returns:
             True if initialization successful
@@ -144,6 +178,15 @@ class RouterService:
         if not self._harbor_manager.load():
             logger.error("Failed to load harbors")
             return False
+        
+        # Initialize sea router if available
+        if self._sea_router:
+            if self._sea_router.initialize():
+                self._state.sea_routing_available = True
+                logger.info(f"Sea routing initialized with {self._sea_router.grid_node_count} nodes")
+            else:
+                logger.warning("Sea routing not initialized - geodata may be missing")
+                self._state.sea_routing_available = False
         
         logger.info(f"RouterService initialized with {self._harbor_manager.count} harbors")
         return True
@@ -255,24 +298,58 @@ class RouterService:
         lat = self._state.latitude
         lon = self._state.longitude
         
+        # Check if on sea (if sea router available)
+        if self._sea_router and self._sea_router.is_initialized:
+            classification = self._sea_router.classify_position(lat, lon)
+            self._state.is_on_sea = classification.is_sea
+            self._state.terrain_type = classification.terrain_type
+        
         # Always calculate nearest harbors
         self._state.nearest_harbors = self._harbor_manager.find_nearest(lat, lon)
         
         # Determine destination based on mode
+        dest_harbor = None
         if self._state.system_mode == SystemMode.EMERGENCY:
             # In emergency mode, destination is the nearest harbor
             if self._state.nearest_harbors:
                 self._state.destination = self._state.nearest_harbors[0]
+                dest_harbor = self._state.nearest_harbors[0].harbor
         else:
             # In normal mode, use selected harbor
             if self._selected_harbor:
                 self._state.destination = self._harbor_manager.calculate_distance_to(
                     self._selected_harbor, lat, lon
                 )
+                if self._state.destination:
+                    dest_harbor = self._state.destination.harbor
             else:
                 self._state.destination = None
         
         self._state.selected_harbor = self._selected_harbor
+        
+        # Calculate sea route if destination exists and sea routing available
+        if dest_harbor and self._sea_router and self._sea_router.is_initialized:
+            route = self._sea_router.plan_route(
+                lat, lon,
+                dest_harbor.latitude, dest_harbor.longitude,
+                dest_harbor.name
+            )
+            
+            if route.is_valid:
+                self._state.sea_route = route.to_dict()
+                self._state.route_waypoints = [w.to_dict() for w in route.waypoints]
+                
+                # Get navigation guidance
+                guidance = self._sea_router.get_guidance(lat, lon, route)
+                self._state.navigation_guidance = guidance.to_dict()
+            else:
+                self._state.sea_route = None
+                self._state.route_waypoints = []
+                self._state.navigation_guidance = None
+        else:
+            self._state.sea_route = None
+            self._state.route_waypoints = []
+            self._state.navigation_guidance = None
     
     def _on_emergency_triggered(self) -> None:
         """Callback when emergency mode is triggered"""
@@ -378,6 +455,16 @@ class RouterService:
     def fuel_monitor(self) -> FuelMonitor:
         """Access to fuel monitor"""
         return self._fuel_monitor
+    
+    @property
+    def sea_router(self) -> Optional['SeaRouter']:
+        """Access to sea router (may be None if not available)"""
+        return self._sea_router
+    
+    @property
+    def sea_routing_available(self) -> bool:
+        """Check if sea routing is available"""
+        return self._sea_router is not None and self._sea_router.is_initialized
 
 
 # Singleton instance for easy access
