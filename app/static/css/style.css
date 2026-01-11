@@ -666,6 +666,66 @@ body {
     color: var(--accent-warning);
 }
 
+/* Embarkation harbor marker */
+.harbor-marker.embarkation {
+    background: var(--accent-info);
+    border: 3px solid var(--text-primary);
+    animation: embark-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes embark-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 170, 255, 0.6); }
+    50% { box-shadow: 0 0 15px 5px rgba(0, 170, 255, 0.3); }
+}
+
+/* Embarkation card */
+.embark-card {
+    border: 1px solid var(--accent-info);
+    background: rgba(0, 170, 255, 0.05);
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.embark-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.embark-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.terrain-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--accent-warning);
+    color: var(--bg-primary);
+    border-radius: 3px;
+    font-weight: 600;
+    margin-left: auto;
+}
+
+.embark-content {
+    padding: var(--spacing-sm) 0;
+}
+
+.embark-harbor-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent-info);
+    margin-bottom: var(--spacing-xs);
+}
+
+.embark-note {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+    font-style: italic;
+}
+
 /* Sea routing indicator */
 .route-type-indicator {
     font-size: 10px;

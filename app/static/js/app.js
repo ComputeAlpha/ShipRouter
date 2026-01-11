@@ -36,7 +36,9 @@ const state = {
     terrainType: 'unknown',
     seaRoute: null,
     routeWaypoints: [],
-    navigationGuidance: null
+    navigationGuidance: null,
+    // Embarkation
+    embarkation: null
 };
 
 // =============================================================================
@@ -99,6 +101,7 @@ let harborMarkers = {};
 let destinationLine;
 let seaRouteLine;
 let waypointMarkers = [];
+let embarkationVisible = false;  // Track embarkation section visibility
 
 function initMap() {
     map = L.map('map', {
@@ -337,7 +340,7 @@ function handleStateUpdate(data) {
         state.fuelLow = data.fuel.is_low;
     }
     
-    // Sea routing
+    // Sea routing - update state first
     if (data.sea_routing) {
         state.seaRoutingAvailable = data.sea_routing.available;
         state.isOnSea = data.sea_routing.is_on_sea;
@@ -348,6 +351,10 @@ function handleStateUpdate(data) {
         
         updateTerrainUI(data.sea_routing);
     }
+    
+    // Embarkation - pass current terrain state
+    state.embarkation = data.embarkation;
+    updateEmbarkationUI(data.embarkation, state.isOnSea);
     
     // Navigation
     if (data.navigation) {
@@ -385,6 +392,11 @@ function handleStateUpdate(data) {
                     dest.longitude,
                     isEmergency
                 );
+            }
+            
+            // Highlight embarkation harbor if on land
+            if (state.embarkation && state.embarkation.required) {
+                highlightEmbarkationHarbor(state.embarkation.harbor);
             }
         } else {
             updateDestinationMarker(null);
@@ -489,8 +501,61 @@ function updateTerrainUI(seaRouting) {
     // Update GPS card to show terrain type
     const terrainEl = document.getElementById('gpsTerrain');
     if (terrainEl) {
-        terrainEl.textContent = seaRouting.is_on_sea ? 'Sea' : 'Land';
+        const terrainText = seaRouting.is_on_sea ? 'Sea' : 'Land';
+        if (terrainEl.textContent !== terrainText) {
+            terrainEl.textContent = terrainText;
+        }
         terrainEl.classList.toggle('warning', !seaRouting.is_on_sea);
+    }
+}
+
+function updateEmbarkationUI(embarkation, isOnSea) {
+    const embarkSection = document.getElementById('embarkationSection');
+    if (!embarkSection) return;
+    
+    // Simple logic: show if required, hide if not
+    const shouldShow = embarkation && embarkation.required === true;
+    
+    if (shouldShow) {
+        // Show and update values
+        if (!embarkationVisible) {
+            embarkationVisible = true;
+            embarkSection.style.display = 'block';
+            void embarkSection.offsetHeight;
+            embarkSection.classList.add('visible');
+        }
+        
+        // Always update values
+        const harborEl = document.getElementById('embarkHarbor');
+        const distEl = document.getElementById('embarkDistance');
+        const bearingEl = document.getElementById('embarkBearing');
+        
+        if (harborEl) harborEl.textContent = embarkation.harbor || '--';
+        if (distEl) distEl.textContent = (embarkation.distance_km?.toFixed(1) || '--');
+        if (bearingEl) bearingEl.textContent = `${embarkation.bearing?.toFixed(0) || '--'}° ${embarkation.cardinal || ''}`;
+    } else {
+        // Hide
+        if (embarkationVisible) {
+            embarkationVisible = false;
+            embarkSection.classList.remove('visible');
+            setTimeout(() => {
+                if (!embarkationVisible) {
+                    embarkSection.style.display = 'none';
+                }
+            }, 300);
+        }
+    }
+}
+
+function highlightEmbarkationHarbor(harborName) {
+    // Add special highlight to embarkation harbor marker
+    if (harborName && harborMarkers[harborName]) {
+        const icon = L.divIcon({
+            className: 'harbor-marker embarkation',
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
+        });
+        harborMarkers[harborName].setIcon(icon);
     }
 }
 

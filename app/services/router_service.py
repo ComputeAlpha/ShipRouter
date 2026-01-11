@@ -75,6 +75,13 @@ class SystemState:
     route_waypoints: List[dict] = field(default_factory=list)
     navigation_guidance: Optional[dict] = None  # NavigationGuidance.to_dict()
     
+    # Embarkation (for land-to-sea routes)
+    requires_embarkation: bool = False
+    embarkation_harbor: Optional[str] = None
+    embarkation_distance_km: float = 0.0
+    embarkation_bearing: float = 0.0
+    embarkation_cardinal: str = ""
+    
     # Timestamps
     last_update: Optional[datetime] = None
     last_gps_update: Optional[datetime] = None
@@ -113,6 +120,13 @@ class SystemState:
                 "waypoints": self.route_waypoints,
                 "guidance": self.navigation_guidance
             },
+            "embarkation": {
+                "required": self.requires_embarkation,
+                "harbor": self.embarkation_harbor,
+                "distance_km": round(self.embarkation_distance_km, 2),
+                "bearing": round(self.embarkation_bearing, 1),
+                "cardinal": self.embarkation_cardinal
+            } if self.requires_embarkation else None,
             "timestamps": {
                 "last_update": self.last_update.isoformat() if self.last_update else None,
                 "last_gps": self.last_gps_update.isoformat() if self.last_gps_update else None,
@@ -184,6 +198,11 @@ class RouterService:
             if self._sea_router.initialize():
                 self._state.sea_routing_available = True
                 logger.info(f"Sea routing initialized with {self._sea_router.grid_node_count} nodes")
+                
+                # Pass harbor data to sea router for land-to-sea routing
+                harbors = self._harbor_manager.get_all()
+                harbor_tuples = [(h.name, h.latitude, h.longitude) for h in harbors]
+                self._sea_router.set_harbors(harbor_tuples)
             else:
                 logger.warning("Sea routing not initialized - geodata may be missing")
                 self._state.sea_routing_available = False
@@ -324,6 +343,9 @@ class RouterService:
                     dest_harbor = self._state.destination.harbor
             else:
                 self._state.destination = None
+                # Clear route when no destination
+                if self._sea_router:
+                    self._sea_router.clear_route()
         
         self._state.selected_harbor = self._selected_harbor
         
@@ -337,19 +359,85 @@ class RouterService:
             
             if route.is_valid:
                 self._state.sea_route = route.to_dict()
-                self._state.route_waypoints = [w.to_dict() for w in route.waypoints]
                 
-                # Get navigation guidance
+                # Get navigation guidance (includes next waypoint calculation)
                 guidance = self._sea_router.get_guidance(lat, lon, route)
                 self._state.navigation_guidance = guidance.to_dict()
+                
+                # Build REMAINING waypoints for display (current pos → remaining waypoints)
+                # This ensures the route line always starts from current position
+                remaining_waypoints = self._build_remaining_waypoints(
+                    lat, lon, route, guidance
+                )
+                self._state.route_waypoints = remaining_waypoints
+                
+                # Get embarkation info from SeaRouter (it manages the state)
+                embark = self._sea_router.embarkation_harbor
+                if embark and not self._state.is_on_sea:
+                    self._state.requires_embarkation = True
+                    self._state.embarkation_harbor = embark[0]  # name
+                    self._state.embarkation_distance_km = guidance.distance_to_embarkation_km
+                    self._state.embarkation_bearing = guidance.bearing_to_embarkation
+                    self._state.embarkation_cardinal = guidance.cardinal_to_embarkation
+                else:
+                    self._state.requires_embarkation = False
+                    self._state.embarkation_harbor = None
+                    self._state.embarkation_distance_km = 0.0
+                    self._state.embarkation_bearing = 0.0
+                    self._state.embarkation_cardinal = ""
             else:
                 self._state.sea_route = None
                 self._state.route_waypoints = []
                 self._state.navigation_guidance = None
+                self._state.requires_embarkation = False
+                self._state.embarkation_harbor = None
         else:
             self._state.sea_route = None
             self._state.route_waypoints = []
             self._state.navigation_guidance = None
+            self._state.requires_embarkation = False
+            self._state.embarkation_harbor = None
+    
+    def _build_remaining_waypoints(
+        self, 
+        current_lat: float, 
+        current_lon: float, 
+        route, 
+        guidance
+    ) -> List[dict]:
+        """
+        Build list of remaining waypoints starting from current position.
+        This ensures the displayed route always starts from vessel location.
+        """
+        from ..core.navigation import haversine_distance
+        
+        remaining = []
+        
+        # Always start with current position
+        remaining.append({
+            "lat": current_lat,
+            "lon": current_lon,
+            "is_origin": True,
+            "is_current_position": True
+        })
+        
+        # Find and add remaining waypoints (skip passed ones)
+        found_next = False
+        for wp in route.waypoints:
+            if wp.is_origin:
+                continue  # Skip original origin
+            
+            dist = haversine_distance(current_lat, current_lon, wp.lat, wp.lon)
+            
+            # Include waypoint if not yet reached (>500m away)
+            if dist > 0.5:
+                found_next = True
+                remaining.append(wp.to_dict())
+            elif not found_next:
+                # This waypoint has been passed, skip it
+                continue
+        
+        return remaining
     
     def _on_emergency_triggered(self) -> None:
         """Callback when emergency mode is triggered"""

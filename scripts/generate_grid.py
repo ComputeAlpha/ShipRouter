@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Grid Generation Utility
-Run this after downloading the Natural Earth shapefile to generate the navigation grid.
 
 Usage:
     python generate_grid.py [--resolution 10]

@@ -39,7 +39,14 @@ class NavigationGuidance:
     is_on_sea: bool = True
     terrain_type: str = "unknown"
     
-    # Next waypoint
+    # Land-to-sea routing
+    requires_embarkation: bool = False
+    embarkation_harbor: Optional[str] = None
+    distance_to_embarkation_km: float = 0.0
+    bearing_to_embarkation: float = 0.0
+    cardinal_to_embarkation: str = ""
+    
+    # Next waypoint (for sea portion)
     next_waypoint: Optional[RouteWaypoint] = None
     distance_to_next_km: float = 0.0
     distance_to_next_nm: float = 0.0
@@ -57,6 +64,7 @@ class NavigationGuidance:
     
     # Route type
     is_direct_route: bool = False  # True if straight line, False if via waypoints
+    route_type: str = "direct"  # "direct", "sea", "land_to_sea"
     
     def to_dict(self) -> dict:
         return {
@@ -67,6 +75,13 @@ class NavigationGuidance:
                 "is_on_sea": self.is_on_sea,
                 "terrain": self.terrain_type
             },
+            "embarkation": {
+                "required": self.requires_embarkation,
+                "harbor": self.embarkation_harbor,
+                "distance_km": round(self.distance_to_embarkation_km, 2),
+                "bearing": round(self.bearing_to_embarkation, 1),
+                "cardinal": self.cardinal_to_embarkation
+            } if self.requires_embarkation else None,
             "next_waypoint": self.next_waypoint.to_dict() if self.next_waypoint else None,
             "navigation": {
                 "distance_km": round(self.distance_to_next_km, 2),
@@ -83,6 +98,7 @@ class NavigationGuidance:
                 "waypoints_remaining": self.waypoints_remaining,
                 "percent": round(self.progress_percent, 1)
             },
+            "route_type": self.route_type,
             "is_direct_route": self.is_direct_route
         }
 
@@ -94,6 +110,7 @@ class SeaRouter:
     Provides:
     - Land/sea detection
     - Sea route planning
+    - Land-to-sea routing (via nearest harbor)
     - Real-time navigation guidance
     """
     
@@ -118,8 +135,15 @@ class SeaRouter:
         self._grid: Optional[NavigationGrid] = None
         self._route_engine: Optional[RouteEngine] = None
         
+        # Route state - persistent until explicitly changed
         self._current_route: Optional[SeaRoute] = None
+        self._embarkation_harbor: Optional[Tuple[str, float, float]] = None  # (name, lat, lon)
+        self._last_terrain_was_land: Optional[bool] = None  # Track terrain changes
+        self._last_destination: Optional[str] = None  # Track destination changes
         self._initialized = False
+        
+        # Harbor data for land-to-sea routing
+        self._harbors: List[Tuple[str, float, float]] = []  # (name, lat, lon)
         
         if auto_load:
             self.initialize()
@@ -173,6 +197,40 @@ class SeaRouter:
         logger.info(f"SeaRouter initialized: {self._grid.node_count} navigation nodes")
         return True
     
+    def set_harbors(self, harbors: List[Tuple[str, float, float]]) -> None:
+        """
+        Set harbor data for land-to-sea routing.
+        
+        Args:
+            harbors: List of (name, latitude, longitude) tuples
+        """
+        self._harbors = harbors
+        logger.info(f"SeaRouter: Loaded {len(harbors)} harbors for land-to-sea routing")
+    
+    def find_nearest_harbor(self, lat: float, lon: float) -> Optional[Tuple[str, float, float, float]]:
+        """
+        Find the nearest harbor to a position.
+        
+        Args:
+            lat, lon: Position to search from
+        
+        Returns:
+            Tuple of (name, harbor_lat, harbor_lon, distance_km) or None
+        """
+        if not self._harbors:
+            return None
+        
+        nearest = None
+        min_dist = float('inf')
+        
+        for name, h_lat, h_lon in self._harbors:
+            dist = haversine_distance(lat, lon, h_lat, h_lon)
+            if dist < min_dist:
+                min_dist = dist
+                nearest = (name, h_lat, h_lon, dist)
+        
+        return nearest
+    
     def is_on_sea(self, lat: float, lon: float) -> bool:
         """Check if position is on sea"""
         if not self._classifier or not self._classifier.is_loaded:
@@ -200,6 +258,11 @@ class SeaRouter:
         """
         Plan a sea route from origin to destination.
         
+        Handles three cases:
+        1. Origin on sea → Direct sea routing
+        2. Origin on land → Land to nearest harbor, then sea route
+        3. Sea routing not available → Direct line
+        
         Args:
             origin_lat, origin_lon: Starting position
             dest_lat, dest_lon: Destination position
@@ -209,47 +272,202 @@ class SeaRouter:
             SeaRoute with waypoints
         """
         if not self._initialized or not self._route_engine:
-            # Return direct route if not initialized
-            route = SeaRoute(
-                origin=(origin_lat, origin_lon),
-                destination=(dest_lat, dest_lon),
-                destination_name=dest_name
+            return self._create_direct_route(
+                origin_lat, origin_lon, dest_lat, dest_lon, dest_name,
+                "Direct route (sea routing not initialized)"
             )
-            
-            # Create simple direct route
-            direct_distance = haversine_distance(
-                origin_lat, origin_lon, dest_lat, dest_lon
-            )
-            bearing = calculate_bearing(
-                origin_lat, origin_lon, dest_lat, dest_lon
-            )
-            
-            route.waypoints = [
-                RouteWaypoint(
-                    lat=origin_lat, lon=origin_lon,
-                    is_origin=True,
-                    bearing_to_next=bearing,
-                    cardinal_to_next=bearing_to_cardinal(bearing)
-                ),
-                RouteWaypoint(
-                    lat=dest_lat, lon=dest_lon,
-                    is_destination=True,
-                    distance_from_prev_km=direct_distance,
-                    cumulative_distance_km=direct_distance
-                )
-            ]
-            route.total_distance_km = direct_distance
-            route.total_distance_nm = direct_distance / 1.852
-            route.is_valid = True
-            route.error_message = "Direct route (sea routing not initialized)"
-            
-            return route
         
-        route = self._route_engine.find_route(
-            origin_lat, origin_lon,
+        # Check current terrain
+        currently_on_land = self.is_on_land(origin_lat, origin_lon)
+        
+        # Determine if we need to recalculate the route
+        terrain_changed = (self._last_terrain_was_land != currently_on_land)
+        destination_changed = (self._last_destination != dest_name)
+        needs_recalculation = terrain_changed or destination_changed or self._current_route is None
+        
+        # If nothing changed and we have a valid route, just return it
+        if not needs_recalculation and self._current_route and self._current_route.is_valid:
+            return self._current_route
+        
+        # Update tracking state
+        self._last_terrain_was_land = currently_on_land
+        self._last_destination = dest_name
+        
+        if currently_on_land:
+            # LAND-TO-SEA ROUTING
+            logger.info(f"Planning land-to-sea route (terrain_changed={terrain_changed}, dest_changed={destination_changed})")
+            return self._plan_land_to_sea_route(
+                origin_lat, origin_lon, dest_lat, dest_lon, dest_name
+            )
+        else:
+            # NORMAL SEA ROUTING - clear embarkation when on sea
+            if self._embarkation_harbor is not None:
+                logger.info("Cleared embarkation harbor (now on sea)")
+            self._embarkation_harbor = None
+            
+            route = self._route_engine.find_route(
+                origin_lat, origin_lon,
+                dest_lat, dest_lon,
+                dest_name
+            )
+            
+            self._current_route = route
+            return route
+    
+    def _plan_land_to_sea_route(
+        self,
+        origin_lat: float,
+        origin_lon: float,
+        dest_lat: float,
+        dest_lon: float,
+        dest_name: str
+    ) -> SeaRoute:
+        """
+        Plan a route from land to sea destination.
+        
+        1. Find nearest harbor to origin (embarkation point)
+        2. Route from that harbor to destination via sea
+        3. Prepend land leg to the route
+        """
+        # Find nearest harbor for embarkation
+        nearest = self.find_nearest_harbor(origin_lat, origin_lon)
+        
+        if not nearest:
+            logger.warning("No harbors available for land-to-sea routing")
+            return self._create_direct_route(
+                origin_lat, origin_lon, dest_lat, dest_lon, dest_name,
+                "No harbors available for land-to-sea routing"
+            )
+        
+        embark_name, embark_lat, embark_lon, embark_dist = nearest
+        self._embarkation_harbor = (embark_name, embark_lat, embark_lon)
+        
+        logger.info(f"Embarkation point: {embark_name} ({embark_dist:.1f} km)")
+        
+        # Check if destination is the embarkation harbor itself
+        dist_to_dest = haversine_distance(embark_lat, embark_lon, dest_lat, dest_lon)
+        if dist_to_dest < 1.0:  # Within 1km - same harbor
+            logger.info("Destination is the embarkation harbor - direct route")
+            return self._create_direct_route(
+                origin_lat, origin_lon, dest_lat, dest_lon, dest_name,
+                None  # No error, just direct route
+            )
+        
+        # Get sea route from embarkation harbor to destination
+        sea_route = self._route_engine.find_route(
+            embark_lat, embark_lon,
             dest_lat, dest_lon,
             dest_name
         )
+        
+        if not sea_route.is_valid:
+            # Sea routing failed, fall back to direct
+            logger.warning(f"Sea routing failed: {sea_route.error_message}")
+            return self._create_direct_route(
+                origin_lat, origin_lon, dest_lat, dest_lon, dest_name,
+                f"Sea route unavailable: {sea_route.error_message}"
+            )
+        
+        # Build combined route: Land origin → Embarkation → Sea route → Destination
+        combined_waypoints = []
+        
+        # Add land origin
+        bearing_to_embark = calculate_bearing(origin_lat, origin_lon, embark_lat, embark_lon)
+        combined_waypoints.append(RouteWaypoint(
+            lat=origin_lat,
+            lon=origin_lon,
+            is_origin=True,
+            bearing_to_next=bearing_to_embark,
+            cardinal_to_next=bearing_to_cardinal(bearing_to_embark)
+        ))
+        
+        # Add embarkation point (mark it specially)
+        embark_waypoint = RouteWaypoint(
+            lat=embark_lat,
+            lon=embark_lon,
+            node_id=f"EMBARK_{embark_name}",
+            distance_from_prev_km=embark_dist,
+            cumulative_distance_km=embark_dist
+        )
+        combined_waypoints.append(embark_waypoint)
+        
+        # Add sea route waypoints (skip the first one if it's the embarkation point)
+        cumulative = embark_dist
+        for i, wp in enumerate(sea_route.waypoints):
+            if wp.is_origin:
+                continue  # Skip sea route origin (it's our embarkation)
+            
+            # Update cumulative distance
+            cumulative += wp.distance_from_prev_km
+            
+            new_wp = RouteWaypoint(
+                lat=wp.lat,
+                lon=wp.lon,
+                node_id=wp.node_id,
+                distance_from_prev_km=wp.distance_from_prev_km,
+                cumulative_distance_km=cumulative,
+                bearing_to_next=wp.bearing_to_next,
+                cardinal_to_next=wp.cardinal_to_next,
+                is_destination=wp.is_destination
+            )
+            combined_waypoints.append(new_wp)
+        
+        # Create combined route
+        combined_route = SeaRoute(
+            origin=(origin_lat, origin_lon),
+            destination=(dest_lat, dest_lon),
+            destination_name=dest_name,
+            waypoints=combined_waypoints,
+            total_distance_km=embark_dist + sea_route.total_distance_km,
+            total_distance_nm=(embark_dist + sea_route.total_distance_km) / 1.852,
+            is_valid=True,
+            error_message=None
+        )
+        
+        self._current_route = combined_route
+        return combined_route
+    
+    def _create_direct_route(
+        self,
+        origin_lat: float,
+        origin_lon: float,
+        dest_lat: float,
+        dest_lon: float,
+        dest_name: str,
+        error_message: Optional[str]
+    ) -> SeaRoute:
+        """Create a simple direct route (straight line)"""
+        direct_distance = haversine_distance(
+            origin_lat, origin_lon, dest_lat, dest_lon
+        )
+        bearing = calculate_bearing(
+            origin_lat, origin_lon, dest_lat, dest_lon
+        )
+        
+        route = SeaRoute(
+            origin=(origin_lat, origin_lon),
+            destination=(dest_lat, dest_lon),
+            destination_name=dest_name
+        )
+        
+        route.waypoints = [
+            RouteWaypoint(
+                lat=origin_lat, lon=origin_lon,
+                is_origin=True,
+                bearing_to_next=bearing,
+                cardinal_to_next=bearing_to_cardinal(bearing)
+            ),
+            RouteWaypoint(
+                lat=dest_lat, lon=dest_lon,
+                is_destination=True,
+                distance_from_prev_km=direct_distance,
+                cumulative_distance_km=direct_distance
+            )
+        ]
+        route.total_distance_km = direct_distance
+        route.total_distance_nm = direct_distance / 1.852
+        route.is_valid = True
+        route.error_message = error_message
         
         self._current_route = route
         return route
@@ -289,6 +507,24 @@ class SeaRouter:
         guidance.has_route = True
         guidance.destination_name = route.destination_name
         guidance.is_direct_route = len(route.waypoints) <= 2
+        
+        # Check if this is a land-to-sea route
+        if self._embarkation_harbor and not guidance.is_on_sea:
+            guidance.requires_embarkation = True
+            embark_name, embark_lat, embark_lon = self._embarkation_harbor
+            guidance.embarkation_harbor = embark_name
+            guidance.distance_to_embarkation_km = haversine_distance(
+                current_lat, current_lon, embark_lat, embark_lon
+            )
+            guidance.bearing_to_embarkation = calculate_bearing(
+                current_lat, current_lon, embark_lat, embark_lon
+            )
+            guidance.cardinal_to_embarkation = bearing_to_cardinal(guidance.bearing_to_embarkation)
+            guidance.route_type = "land_to_sea"
+        elif len(route.waypoints) > 2:
+            guidance.route_type = "sea"
+        else:
+            guidance.route_type = "direct"
         
         # Find next waypoint
         next_wp = None
@@ -343,13 +579,22 @@ class SeaRouter:
         return guidance
     
     def clear_route(self) -> None:
-        """Clear current route"""
+        """Clear current route and all tracking state"""
         self._current_route = None
+        self._embarkation_harbor = None
+        self._last_terrain_was_land = None
+        self._last_destination = None
+        logger.info("Route cleared")
     
     @property
     def current_route(self) -> Optional[SeaRoute]:
         """Get current active route"""
         return self._current_route
+    
+    @property
+    def embarkation_harbor(self) -> Optional[Tuple[str, float, float]]:
+        """Get current embarkation harbor (for land-to-sea routes)"""
+        return self._embarkation_harbor
     
     @property
     def is_initialized(self) -> bool:

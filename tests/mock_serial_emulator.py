@@ -40,9 +40,9 @@ class GPSSimulator:
     
     def __init__(
         self,
-        start_lat: float = 13.0827,
-        start_lon: float = 80.2871,
-        speed_kmh: float = 20.0
+        start_lat: float = 10.9974,
+        start_lon: float = 76.9589,
+        speed_kmh: float = 2500.0
     ):
         self.lat = start_lat
         self.lon = start_lon
@@ -149,8 +149,8 @@ class MockSerialEmulator:
     def __init__(
         self,
         update_rate_hz: float = 5.0,
-        start_lat: float = 13.0827,
-        start_lon: float = 80.2871
+        start_lat: float = 10.9974,
+        start_lon: float = 76.9589,
     ):
         self.update_rate_hz = update_rate_hz
         self.update_interval = 1.0 / update_rate_hz
@@ -290,12 +290,12 @@ def main():
         help="Update rate in Hz (default: 5.0)"
     )
     parser.add_argument(
-        "--lat", type=float, default=13.0827,
-        help="Starting latitude (default: 13.0827 - Chennai)"
+        "--lat", type=float, default=10.9974,
+        help="Starting latitude"
     )
     parser.add_argument(
-        "--lon", type=float, default=80.2871,
-        help="Starting longitude (default: 80.2871 - Chennai)"
+        "--lon", type=float, default=76.9589,
+        help="Starting longitude"
     )
     parser.add_argument(
         "--fuel-low", action="store_true",

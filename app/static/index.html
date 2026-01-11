@@ -80,6 +80,10 @@
                         <span class="data-label">Satellites</span>
                         <span class="data-value" id="gpsSatellites">0</span>
                     </div>
+                    <div class="data-row">
+                        <span class="data-label">Terrain</span>
+                        <span class="data-value" id="gpsTerrain">--</span>
+                    </div>
                 </div>
             </section>
 
@@ -113,6 +117,29 @@
                         <div class="metric">
                             <span class="metric-value" id="navBearing">---</span>
                             <span class="metric-unit" id="navCardinal">°</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Embarkation Point (shown when on land) -->
+            <section class="status-card embark-card" id="embarkationSection" style="display: none;">
+                <div class="card-header embark-header">
+                    <span class="card-icon">🚗</span>
+                    <span class="card-title">Embarkation Point</span>
+                    <span class="terrain-badge">ON LAND</span>
+                </div>
+                <div class="embark-content">
+                    <div class="embark-harbor-name" id="embarkHarbor">--</div>
+                    <div class="embark-note">Proceed to this harbor to begin sea routing</div>
+                    <div class="nav-metrics">
+                        <div class="metric">
+                            <span class="metric-value" id="embarkDistance">---</span>
+                            <span class="metric-unit">km</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-value" id="embarkBearing">---</span>
+                            <span class="metric-unit">°</span>
                         </div>
                     </div>
                 </div>
